@@ -9,17 +9,13 @@ import (
 	nurl "net/url"
 	"regexp"
 	"strconv"
-)
 
-import (
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/hashicorp/go-multierror"
-	"github.com/lib/pq"
-)
-
-import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
+	"github.com/hashicorp/go-multierror"
+	"github.com/jackc/pgconn"
+	_ "github.com/jackc/pgx/v4"
 )
 
 func init() {
@@ -111,7 +107,7 @@ func (c *CockroachDb) Open(url string) (database.Driver, error) {
 	re := regexp.MustCompile("^(cockroach(db)?|crdb-postgres)")
 	connectString := re.ReplaceAllString(migrate.FilterCustomQuery(purl).String(), "postgres")
 
-	db, err := sql.Open("postgres", connectString)
+	db, err := sql.Open("pgx", connectString)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +199,7 @@ func (c *CockroachDb) Unlock() error {
 	// a better locking mechanism is added, a manual purging of the lock table may be required in such circumstances
 	query := "DELETE FROM " + c.config.LockTable + " WHERE lock_id = $1"
 	if _, err := c.db.Exec(query, aid); err != nil {
-		if e, ok := err.(*pq.Error); ok {
+		if e, ok := err.(*pgconn.PgError); ok {
 			// 42P01 is "UndefinedTableError" in CockroachDB
 			// https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/pgwire/pgerror/codes.go
 			if e.Code == "42P01" {
@@ -262,7 +258,7 @@ func (c *CockroachDb) Version() (version int, dirty bool, err error) {
 		return database.NilVersion, false, nil
 
 	case err != nil:
-		if e, ok := err.(*pq.Error); ok {
+		if e, ok := err.(*pgconn.PgError); ok {
 			// 42P01 is "UndefinedTableError" in CockroachDB
 			// https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/pgwire/pgerror/codes.go
 			if e.Code == "42P01" {
